@@ -32,6 +32,8 @@ def load_story_info(story_name: str, featureset_name: str = None):
 
     if featureset_name:
         story_data = model_data[story_name]
+        print("story_data", story_data.shape)
+        print("word_presentation_times", word_presentation_times.shape)
         assert len(story_data) == len(word_presentation_times)
     else:
         story_data = None

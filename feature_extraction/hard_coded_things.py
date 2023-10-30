@@ -25,6 +25,15 @@ featuresets_dict = {
             },
         ]
     ],
+    "MULTILANG_BERT_all": [
+        [
+            "contextual_lm",
+            {
+                "model_name": "bert-base-multilingual-uncased",
+                "layer_num": -1,
+            },
+        ]
+    ]
 }
 
 silence_length = 5

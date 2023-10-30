@@ -1,0 +1,4 @@
+jupyter
+black
+flake8
+pylance
