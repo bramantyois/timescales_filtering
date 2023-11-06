@@ -90,7 +90,7 @@ def save_filtered_features(
         _,
         _,
         _,
-    ) = load_story_info(story_name, featureset_name=featureset_name)
+    ) = load_story_info(story_name, featureset_name=featureset_name)    
     assert stimulus_matrix.shape[1] == num_neurons
 
     if neuron_index_range:
@@ -452,6 +452,7 @@ if __name__ == "__main__":
 
     featureset_name = sys.argv[1]
     num_neurons = 9984
+    #num_neurons = 100
     for story_name in train_stories[:1] + test_stories + train_stories[1:]:
         extract_features(
             featureset_name=featureset_name,

@@ -239,7 +239,9 @@ def get_contextual_embeddings(
     )
     for sentence_start, sentence_end in zip(sentence_starts, sentence_ends):
         sentence = text[sentence_start : sentence_end + 1]
-        if sentence[-1] != ".":
+        if sentence[-1] == ".":
+            sentence = sentence[:-1]
+        else:
             continue
         tokenized_input_sequence = np.concatenate(
             [tokenizer.tokenize(word) for word in sentence]
