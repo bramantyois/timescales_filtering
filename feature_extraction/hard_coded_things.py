@@ -25,12 +25,34 @@ featuresets_dict = {
             },
         ]
     ],
-    "MULTILANG_BERT_all": [
+    "mBERT_all": [
         [
             "contextual_lm",
             {
                 "model_name": "bert-base-multilingual-uncased",
                 "layer_num": -1,
+            },
+        ]
+    ],
+    "mBERT_10": [
+        [
+            "contextual_lm",
+            {
+                "model_name": "bert-base-multilingual-uncased",
+                "layer_num": -1,
+                "max_seq_length": 10,
+                "split_type": "causal_all",
+            },
+        ]
+    ],
+    "mBERT_100": [
+        [
+            "contextual_lm",
+            {
+                "model_name": "bert-base-multilingual-uncased",
+                "layer_num": -1,
+                "max_seq_length": 100,
+                "split_type": "causal_all",
             },
         ]
     ]

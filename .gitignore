@@ -1,3 +1,7 @@
 .venv
 .vscode
 *.pyc
+intermediate_outputs
+outputs
+.archive
+*.out

@@ -21,7 +21,9 @@ from hard_coded_things import (
     train_stories,
 )
 from utils_rbf import apply_rbf_interpolation, get_rbf_interpolation_time
+from utils_linterp import apply_linear_interpolation, get_interpolation_times
 
+import argparse
 
 def get_savename_template(
     story_name: str,
@@ -145,6 +147,7 @@ def interpolate_filtered_embeddings(
     featureset_name: str,
     neuron_index_range: range = None,
     rbf_train_story_name: str = "alternateithicatom",
+    interpolation_method: str = "rbf",
 ):
     """Interpolate filtered stimulus embeddings."""
     print("Saving interpolated filtered embeddings.")
@@ -162,16 +165,26 @@ def interpolate_filtered_embeddings(
         filtered_stimulus_bands = pickle.load(f)
 
     t0 = time.time()
-    filtered_stimulus_bands_interpolated = {
-        fc: apply_rbf_interpolation(
-            vecs=filtered_stimulus_bands[fc],
-            do_train_rbf=(story_name == rbf_train_story_name),
-            fc=fc,
-            data_time=word_presentation_times,
-            save_string_addition=featureset_name + str(neuron_index_range) + str(fc),
-        )
-        for fc in filtered_stimulus_bands.keys()
-    }  # {band_fc: interpolated_stimulus}
+
+    if interpolation_method == "linear":
+        filtered_stimulus_bands_interpolated = {
+            fc: apply_linear_interpolation(
+                stimulus_matrix=filtered_stimulus_bands[fc],
+                word_times=word_presentation_times,
+            )
+            for fc in filtered_stimulus_bands.keys()
+        }
+    elif interpolation_method == "rbf":
+        filtered_stimulus_bands_interpolated = {
+            fc: apply_rbf_interpolation(
+                vecs=filtered_stimulus_bands[fc],
+                do_train_rbf=(story_name == rbf_train_story_name),
+                fc=fc,
+                data_time=word_presentation_times,
+                save_string_addition=featureset_name + str(neuron_index_range) + str(fc),
+            )
+            for fc in filtered_stimulus_bands.keys()
+        }  # {band_fc: interpolated_stimulus}
     t1 = time.time()
     print(f"Time to perform interpolation: {t1 - t0}")
     return filtered_stimulus_bands_interpolated
@@ -184,6 +197,7 @@ def downsample_embeddings(
     num_neurons: int,
     neuron_index_range: range = None,
     lanczos_fc: float = 0.25,
+    interpolation_method: str = "rbf",
 ):
     """Downsample interpolated filtered stimulus embeddings to BOLD TRs."""
     _, word_presentation_times, tr_times, num_words_feature = load_story_info(
@@ -203,7 +217,10 @@ def downsample_embeddings(
 
     print("Get downsampled interpolation value.")
     t1 = time.time()
-    interpolated_times = get_rbf_interpolation_time(word_presentation_times)
+    if interpolation_method == "linear":
+        interpolated_times = get_interpolation_times(word_presentation_times)
+    elif interpolation_method == "rbf":
+        interpolated_times = get_rbf_interpolation_time(word_presentation_times)
     filtered_stimulus_bands_downsampled = {
         fc: apply_filter(
             fir="lanczos",
@@ -276,6 +293,7 @@ def interpolate_and_downsample_filtered_embeddings(
     neuron_index_range: range = None,
     lanczos_fc: float = 0.25,
     rbf_train_story_name: str = "alternateithicatom",
+    interpolation_method: str = "rbf",
 ):
     all_saved = True
     fcs_to_compute = []
@@ -299,7 +317,11 @@ def interpolate_and_downsample_filtered_embeddings(
     _, word_presentation_times, tr_times, num_words_feature = load_story_info(
         story_name
     )
-    interpolated_times = get_rbf_interpolation_time(word_presentation_times)
+
+    if interpolation_method == "linear":
+        interpolated_times = get_interpolation_times(word_presentation_times)
+    elif interpolation_method == "rbf":
+        interpolated_times = get_rbf_interpolation_time(word_presentation_times)
 
     with open(
         get_savename_template(
@@ -316,13 +338,20 @@ def interpolate_and_downsample_filtered_embeddings(
     for fc, filtered_stimulus_band in filtered_stimulus_bands.items():
         if fc not in fcs_to_compute:
             continue
-        interpolated_data = apply_rbf_interpolation(
-            vecs=filtered_stimulus_band,
-            do_train_rbf=(story_name == rbf_train_story_name),
-            fc=fc,
-            data_time=word_presentation_times,
-            save_string_addition=str(neuron_index_range) + str(fc),
-        )
+        
+        if interpolation_method == "linear":
+            interpolated_data = apply_linear_interpolation(
+                stimulus_matrix=filtered_stimulus_band,
+                word_times=word_presentation_times,
+            )
+        elif interpolation_method == "rbf":
+            interpolated_data = apply_rbf_interpolation(
+                vecs=filtered_stimulus_band,
+                do_train_rbf=(story_name == rbf_train_story_name),
+                fc=fc,
+                data_time=word_presentation_times,
+                save_string_addition=str(neuron_index_range) + str(fc),
+            )
         t1 = time.time()
         print(f"Time to perform interpolation: {t1 - t0}, {fc} done")
         downsampled_data = apply_filter(
@@ -355,6 +384,7 @@ def extract_features(
     featureset_name,
     num_neurons,
     story_name,
+    interpolation_method="rbf",
 ):
     """Call function to extract filtered features for each story."""
     save_file_breakpoints = get_save_file_breakpoints(num_neurons)
@@ -376,6 +406,7 @@ def extract_features(
             featureset_name=featureset_name,
             num_neurons=num_neurons,
             neuron_index_range=range(breakpoint_start, breakpoint_end),
+            interpolation_method=interpolation_method,
         )
 
 
@@ -412,31 +443,73 @@ def save_features_dicts(featureset_name: str, save_path: str, num_neurons: int):
     train_features_dict = {}
     test_features_dict = {}
 
+    train_features_dict_meta = []
+    test_features_dict_meta = []
+
     for frequency, timescale_name in frequency_to_period_name_dict.items():
-        train_feature = np.concatenate(
-            [
-                get_feature(
-                    featureset_name=featureset_name,
-                    story_name=story_name,
-                    frequency=frequency,
-                )[silence_length + noise_trim_length : -noise_trim_length]
-                for story_name in train_stories
-            ],
-            axis=0,
-        )
-        test_feature = np.concatenate(
-            [
-                get_feature(
-                    featureset_name=featureset_name,
-                    story_name=story_name,
-                    frequency=frequency,
-                )[silence_length + noise_trim_length : -noise_trim_length]
-                for story_name in test_stories
-            ],
-            axis=0,
-        )
+        train_feature = []
+        for i, story_name in enumerate(train_stories):
+            feature = get_feature(
+                featureset_name=featureset_name,
+                story_name=story_name,
+                frequency=frequency,
+            )[silence_length + noise_trim_length : -noise_trim_length]
+
+            train_features_dict_meta.append({
+                "timescale_name": timescale_name,
+                "index": i,
+                "story_name": story_name,
+                "feature_len": feature.shape[0]
+            })
+
+            train_feature.append(feature)
+
+        test_feature = []
+        for i, story_name in enumerate(test_stories):
+            feature = get_feature(
+                featureset_name=featureset_name,
+                story_name=story_name,
+                frequency=frequency,
+            )[silence_length + noise_trim_length : -noise_trim_length]
+
+            test_features_dict_meta.append({
+                "timescale_name": timescale_name,
+                "index": i,
+                "story_name": story_name,
+                "feature_len": feature.shape[0]
+            })
+
+            test_feature.append(feature)
+
+        train_feature = np.concatenate(train_feature, axis=0)
+        test_feature = np.concatenate(test_feature, axis=0)
+
+        # train_feature = np.concatenate(
+        #     [
+        #         get_feature(
+        #             featureset_name=featureset_name,
+        #             story_name=story_name,
+        #             frequency=frequency,
+        #         )[silence_length + noise_trim_length : -noise_trim_length]
+        #         for story_name in train_stories
+        #     ],
+        #     axis=0,
+        # )
+        # test_feature = np.concatenate(
+        #     [
+        #         get_feature(
+        #             featureset_name=featureset_name,
+        #             story_name=story_name,
+        #             frequency=frequency,
+        #         )[silence_length + noise_trim_length : -noise_trim_length]
+        #         for story_name in test_stories
+        #     ],
+        #     axis=0,
+        # )
+
         train_features_dict[timescale_name] = train_feature
         test_features_dict[timescale_name] = test_feature
+
         print(train_feature.shape, test_feature.shape)
         assert train_feature.shape[1] == test_feature.shape[1] == num_neurons
     print("saving compressed dict")
@@ -444,21 +517,60 @@ def save_features_dicts(featureset_name: str, save_path: str, num_neurons: int):
         os.path.join(save_path), train=train_features_dict, test=test_features_dict
     )
 
+    # save meta data as csv
+    import pandas as pd
+    train_meta_df = pd.DataFrame.from_dict(train_features_dict_meta)
+    test_meta_df = pd.DataFrame.from_dict(test_features_dict_meta)
+
+    train_meta_df.to_csv(os.path.join(save_path.replace(".npz", "_train_meta.csv")))
+    test_meta_df.to_csv(os.path.join(save_path.replace(".npz", "_test_meta.csv")))
+
+def get_parser():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--featureset_name",
+        type=str,
+        default="BERT_all",
+        help="Featureset name",
+        choices=[
+            "BERT_all",
+            "BERT_10",
+            "BERT_100", 
+            "mBERT_all",
+            "mBERT_10",
+            "mBERT_100",
+        ],
+    )
+    parser.add_argument(
+        "--interpolation_method",
+        type=str,
+        default="rbf",
+        help="Interpolation method",
+        choices=["linear", "rbf"],
+    )
+
+    return parser
+
 
 if __name__ == "__main__":
+    parser = get_parser().parse_args()
+
     for save_dir in ["outputs", "intermediate_outputs", "best_alphas"]:
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 
-    featureset_name = sys.argv[1]
+    featureset_name = str(parser.featureset_name)
+    interpolation_method = str(parser.interpolation_method)
     num_neurons = 9984
-    #num_neurons = 100
+
     for story_name in train_stories[:1] + test_stories + train_stories[1:]:
         extract_features(
             featureset_name=featureset_name,
             #use_lowpass=True,
             num_neurons=num_neurons,
             story_name=story_name,
+            interpolation_method=interpolation_method,
         )
     save_features_dicts(
         featureset_name=featureset_name,

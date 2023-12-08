@@ -65,7 +65,7 @@ def apply_rbf_interpolation(
     nhidden = vecs.shape[1]
     start = time.time()
     if do_train_rbf:
-        pool = ThreadPool(processes=10)
+        pool = ThreadPool(processes=4)
         x = pool.map(
             lambda i: interpolation_function_train(
                 data_time, interp_time, vecs, i, best_epsilon=epsilon
@@ -81,7 +81,7 @@ def apply_rbf_interpolation(
         np.savez(best_alphas_filepath, best_alphas=best_alphas)
     else:
         best_alphas = np.load(best_alphas_filepath + ".npz")["best_alphas"]
-        pool = ThreadPool(processes=5)
+        pool = ThreadPool(processes=2)
         x = pool.map(
             lambda i: interpolation_function_test(
                 data_time,
