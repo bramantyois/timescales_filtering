@@ -108,3 +108,5 @@ bad_words_with_sentence_boundaries = bad_words + [
 ]
 sentence_start_words = ["sentence_start", "sentence start"]
 sentence_end_word = "sentence_end"
+
+sentence_end_word_zh = "。"

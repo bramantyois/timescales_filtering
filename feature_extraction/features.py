@@ -11,6 +11,7 @@ from hard_coded_things import (
     bad_words_with_sentence_boundaries,
     sentence_end_word,
     sentence_start_words,
+    sentence_end_word_zh
 )
 
 if torch.cuda.is_available():
@@ -40,10 +41,20 @@ def get_clean_text(ds, words_to_remove=sentence_start_words):
     indices_to_remove = list(set(indices_to_remove))
     indices_to_remove.sort()
     text = np.delete(text, indices_to_remove)
-    sentence_ends = np.where(text == sentence_end_word)[0]
+    sentence_ends_en = np.where(text == sentence_end_word)[0]
+    sentence_ends_zh = np.array([i for i, word in enumerate(text) if sentence_end_word_zh in word])
+    if len(sentence_ends_en) > 0:
+        # english
+        sentence_ends = sentence_ends_en
+        text[sentence_ends] = "."
+    elif len(sentence_ends_zh) > 0:
+        print("Chinese sentence ends: ", len(sentence_ends_zh))
+        # chinese
+        sentence_ends = sentence_ends_zh
     sentence_starts = np.array([-1] + list(sentence_ends[:-1])) + 1
-    text[sentence_ends] = "."
+    
     text = np.array(text)
+    
     data_times = np.copy(ds.data_times)
     data_times = np.delete(data_times, indices_to_remove)
     split_inds = np.copy(ds.split_inds)
@@ -239,7 +250,7 @@ def get_contextual_embeddings(
     )
     for sentence_start, sentence_end in zip(sentence_starts, sentence_ends):
         sentence = text[sentence_start : sentence_end + 1]
-        if sentence[-1] == ".":
+        if sentence[-1] == "." or (sentence_end_word_zh in sentence[-1]) :
             sentence = sentence[:-1]
         else:
             continue

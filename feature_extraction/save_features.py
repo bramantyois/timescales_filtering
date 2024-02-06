@@ -1,6 +1,9 @@
 """Save filtered stimulus features."""
+
 import glob
 import numpy as np
+import pandas as pd
+
 import os
 import pickle
 import sys
@@ -24,6 +27,7 @@ from utils_rbf import apply_rbf_interpolation, get_rbf_interpolation_time
 from utils_linterp import apply_linear_interpolation, get_interpolation_times
 
 import argparse
+
 
 def get_savename_template(
     story_name: str,
@@ -85,6 +89,8 @@ def save_filtered_features(
     use_highpass: bool = False,
     lowpass_fc: float = 1 / 256,
     highpass_fc: float = 1 / 4,
+    story_trfile_dir: str = "../data/en/trfiles",
+    story_grid_dir: str = "../data/en/sentence_TextGrids",
 ):
     """Save filtered stimulus features."""
     (
@@ -92,7 +98,12 @@ def save_filtered_features(
         _,
         _,
         _,
-    ) = load_story_info(story_name, featureset_name=featureset_name)    
+    ) = load_story_info(
+        story_name,
+        featureset_name=featureset_name,
+        trfile_dir=story_trfile_dir,
+        grid_dir=story_grid_dir,
+    )
     assert stimulus_matrix.shape[1] == num_neurons
 
     if neuron_index_range:
@@ -148,10 +159,14 @@ def interpolate_filtered_embeddings(
     neuron_index_range: range = None,
     rbf_train_story_name: str = "alternateithicatom",
     interpolation_method: str = "rbf",
+    story_trfile_dir: str = "../data/en/trfiles",
+    story_grid_dir: str = "../data/en/sentence_TextGrids",
 ):
     """Interpolate filtered stimulus embeddings."""
     print("Saving interpolated filtered embeddings.")
-    _, word_presentation_times, tr_times, _ = load_story_info(story_name)
+    _, word_presentation_times, tr_times, _ = load_story_info(
+        story_name, trfile_dir=story_trfile_dir, grid_dir=story_grid_dir
+    )
 
     with open(
         get_savename_template(
@@ -181,7 +196,9 @@ def interpolate_filtered_embeddings(
                 do_train_rbf=(story_name == rbf_train_story_name),
                 fc=fc,
                 data_time=word_presentation_times,
-                save_string_addition=featureset_name + str(neuron_index_range) + str(fc),
+                save_string_addition=featureset_name
+                + str(neuron_index_range)
+                + str(fc),
             )
             for fc in filtered_stimulus_bands.keys()
         }  # {band_fc: interpolated_stimulus}
@@ -198,10 +215,14 @@ def downsample_embeddings(
     neuron_index_range: range = None,
     lanczos_fc: float = 0.25,
     interpolation_method: str = "rbf",
+    story_trfile_dir: str = "../data/en/trfiles",
+    story_grid_dir: str = "../data/en/sentence_TextGrids",
 ):
     """Downsample interpolated filtered stimulus embeddings to BOLD TRs."""
     _, word_presentation_times, tr_times, num_words_feature = load_story_info(
-        story_name
+        story_name,
+        trfile_dir=story_trfile_dir,
+        grid_dir=story_grid_dir,
     )
 
     with open(
@@ -294,6 +315,9 @@ def interpolate_and_downsample_filtered_embeddings(
     lanczos_fc: float = 0.25,
     rbf_train_story_name: str = "alternateithicatom",
     interpolation_method: str = "rbf",
+    save_interpolation=False,
+    story_trfile_dir: str = "../data/en/trfiles",
+    story_grid_dir: str = "../data/en/sentence_TextGrids",
 ):
     all_saved = True
     fcs_to_compute = []
@@ -315,7 +339,9 @@ def interpolate_and_downsample_filtered_embeddings(
     )
 
     _, word_presentation_times, tr_times, num_words_feature = load_story_info(
-        story_name
+        story_name,
+        trfile_dir=story_trfile_dir,
+        grid_dir=story_grid_dir,
     )
 
     if interpolation_method == "linear":
@@ -338,7 +364,7 @@ def interpolate_and_downsample_filtered_embeddings(
     for fc, filtered_stimulus_band in filtered_stimulus_bands.items():
         if fc not in fcs_to_compute:
             continue
-        
+
         if interpolation_method == "linear":
             interpolated_data = apply_linear_interpolation(
                 stimulus_matrix=filtered_stimulus_band,
@@ -354,6 +380,22 @@ def interpolate_and_downsample_filtered_embeddings(
             )
         t1 = time.time()
         print(f"Time to perform interpolation: {t1 - t0}, {fc} done")
+
+        # save interpolated data
+        if save_interpolation:
+            with open(
+                get_savename_template(
+                    story_name=story_name,
+                    neuron_index_range=neuron_index_range,
+                    featureset_name=featureset_name,
+                    step_name=f"interpolated_{fc}",
+                ),
+                "wb",
+            ) as f:
+                print(f"Saving interpolated data for {fc}")
+                pickle.dump(interpolated_data, f)
+
+        # now downsample
         downsampled_data = apply_filter(
             fir="lanczos",
             data=interpolated_data,
@@ -385,6 +427,9 @@ def extract_features(
     num_neurons,
     story_name,
     interpolation_method="rbf",
+    save_interpolation=False,
+    story_trfile_dir="../data/en/trfiles",
+    story_grid_dir="../data/en/sentence_TextGrids",
 ):
     """Call function to extract filtered features for each story."""
     save_file_breakpoints = get_save_file_breakpoints(num_neurons)
@@ -400,6 +445,8 @@ def extract_features(
             featureset_name=featureset_name,
             num_neurons=num_neurons,
             neuron_index_range=range(breakpoint_start, breakpoint_end),
+            story_grid_dir=story_grid_dir,
+            story_trfile_dir=story_trfile_dir,
         )
         interpolate_and_downsample_filtered_embeddings(
             story_name=story_name,
@@ -407,6 +454,9 @@ def extract_features(
             num_neurons=num_neurons,
             neuron_index_range=range(breakpoint_start, breakpoint_end),
             interpolation_method=interpolation_method,
+            save_interpolation=save_interpolation,
+            story_grid_dir=story_grid_dir,
+            story_trfile_dir=story_trfile_dir,
         )
 
 
@@ -455,12 +505,14 @@ def save_features_dicts(featureset_name: str, save_path: str, num_neurons: int):
                 frequency=frequency,
             )[silence_length + noise_trim_length : -noise_trim_length]
 
-            train_features_dict_meta.append({
-                "timescale_name": timescale_name,
-                "index": i,
-                "story_name": story_name,
-                "feature_len": feature.shape[0]
-            })
+            train_features_dict_meta.append(
+                {
+                    "timescale_name": timescale_name,
+                    "index": i,
+                    "story_name": story_name,
+                    "feature_len": feature.shape[0],
+                }
+            )
 
             train_feature.append(feature)
 
@@ -472,12 +524,14 @@ def save_features_dicts(featureset_name: str, save_path: str, num_neurons: int):
                 frequency=frequency,
             )[silence_length + noise_trim_length : -noise_trim_length]
 
-            test_features_dict_meta.append({
-                "timescale_name": timescale_name,
-                "index": i,
-                "story_name": story_name,
-                "feature_len": feature.shape[0]
-            })
+            test_features_dict_meta.append(
+                {
+                    "timescale_name": timescale_name,
+                    "index": i,
+                    "story_name": story_name,
+                    "feature_len": feature.shape[0],
+                }
+            )
 
             test_feature.append(feature)
 
@@ -518,15 +572,38 @@ def save_features_dicts(featureset_name: str, save_path: str, num_neurons: int):
     )
 
     # save meta data as csv
-    import pandas as pd
     train_meta_df = pd.DataFrame.from_dict(train_features_dict_meta)
+    # select only "2_4_words" timescale since all others have same length
+    train_meta_df = train_meta_df[train_meta_df["timescale_name"] == "2_4_words"]
+    # sort by index
+    train_meta_df = train_meta_df.sort_values(by=["index"])
+    # now get start and end indices
+    train_meta_df["start"] = train_meta_df.groupby("index").cumcount()
+    train_meta_df["end"] = train_meta_df["start"] + train_meta_df["feature_len"]
+
     test_meta_df = pd.DataFrame.from_dict(test_features_dict_meta)
+    # select only "2_4_words" timescale since all others have same length
+    test_meta_df = test_meta_df[test_meta_df["timescale_name"] == "2_4_words"]
+    # sort by index
+    test_meta_df = test_meta_df.sort_values(by=["index"])
+    # now get start and end indices
+    test_meta_df["start"] = test_meta_df.groupby("index").cumcount()
+    test_meta_df["end"] = test_meta_df["start"] + test_meta_df["feature_len"]
 
     train_meta_df.to_csv(os.path.join(save_path.replace(".npz", "_train_meta.csv")))
     test_meta_df.to_csv(os.path.join(save_path.replace(".npz", "_test_meta.csv")))
 
+
 def get_parser():
     parser = argparse.ArgumentParser()
+
+    # parser.add_argument(
+    #     "--task",
+    #     type=str,
+    #     default="build_features",
+    #     help="Task to run",
+    #     choices=["build_features", "interpolate_features"],
+    # )
 
     parser.add_argument(
         "--featureset_name",
@@ -536,7 +613,7 @@ def get_parser():
         choices=[
             "BERT_all",
             "BERT_10",
-            "BERT_100", 
+            "BERT_100",
             "mBERT_all",
             "mBERT_10",
             "mBERT_100",
@@ -545,11 +622,35 @@ def get_parser():
     parser.add_argument(
         "--interpolation_method",
         type=str,
-        default="rbf",
+        default="linear",
         help="Interpolation method",
         choices=["linear", "rbf"],
     )
 
+    parser.add_argument(
+        "--save_interpolation",
+        action="store_true",
+        help="Whether to save interpolated features",
+    )
+    
+    parser.add_argument(
+        "--is_bling",
+        action="store_true",
+        help="Whether bling data is being used",
+    )
+    
+    parser.add_argument(
+        "--subject_id",
+        type=str,
+        default="COL",
+    )
+    
+    parser.add_argument(
+        "--is_chinese",
+        action="store_true",
+        help="Whether Chinese data is being used",
+    )
+    
     return parser
 
 
@@ -562,18 +663,61 @@ if __name__ == "__main__":
 
     featureset_name = str(parser.featureset_name)
     interpolation_method = str(parser.interpolation_method)
+    save_interpolation = bool(parser.save_interpolation)
+    
     num_neurons = 9984
-
+    
+    story_grid_dir = "../data/en/sentence_TextGrids"
+    story_trfile_dir = "../data/en/trfiles"
+    
+    if parser.is_bling:
+        if parser.is_chinese:
+            story_grid_dir = f"../data/bling/{parser.subject_id}/txtgrids/zh"
+            story_trfile_dir = f"../data/bling/{parser.subject_id}/trfiles/zh"
+        else:
+            story_grid_dir = f"../data/bling/{parser.subject_id}/txtgrids/en"
+            story_trfile_dir = f"../data/bling/{parser.subject_id}/trfiles/en"                
+    else:
+        story_grid_dir = "../data/deniz2019/en/sentence_TextGrids"
+        story_trfile_dir = "../data/deniz2019/en/trfiles"
+        
+    # if parser.task == "build_features":
     for story_name in train_stories[:1] + test_stories + train_stories[1:]:
+
         extract_features(
             featureset_name=featureset_name,
-            #use_lowpass=True,
+            # use_lowpass=True,
             num_neurons=num_neurons,
             story_name=story_name,
             interpolation_method=interpolation_method,
+            save_interpolation=save_interpolation,
+            story_grid_dir=story_grid_dir,
+            story_trfile_dir=story_trfile_dir,
         )
     save_features_dicts(
         featureset_name=featureset_name,
         save_path=f"./outputs/timescales_{featureset_name}.npz",
         num_neurons=num_neurons,
     )
+    # else:
+    #     for story_name in train_stories[:1] + test_stories + train_stories[1:]:
+    #         save_file_breakpoints = get_save_file_breakpoints(num_neurons)
+
+    #         interpolated = interpolate_filtered_embeddings(
+    #             story_name=story_name,
+    #             featureset_name=featureset_name,
+    #             neuron_index_range=[0, num_neurons],
+    #             interpolation_method=interpolation_method,
+    #         )
+
+    #         #save interpolated
+    #         with open(
+    #             get_savename_template(
+    #                 story_name=story_name,
+    #                 neuron_index_range=[0, num_neurons],
+    #                 featureset_name=featureset_name,
+    #                 step_name="interpolated",
+    #             ),
+    #             "wb",
+    #         ) as f:
+    #             pickle.dump(interpolated, f)

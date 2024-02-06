@@ -1,4 +1,5 @@
 """Helper functions for saving stimulus features."""
+
 import numpy as np
 import os
 
@@ -13,10 +14,15 @@ def get_feature(featureset, features_object):
     return modeldata
 
 
-def load_story_info(story_name: str, featureset_name: str = None):
+def load_story_info(
+    story_name: str,
+    featureset_name: str = None,
+    trfile_dir: str = "..data/en/trfiles/",
+    grid_dir: str = "../data/sentence_TextGrids",
+):
     """Load stimulus info about story."""
-    grids = load_grids_for_stories([story_name])
-    trfiles = load_generic_trfiles([story_name])
+    grids = load_grids_for_stories([story_name], grid_dir=grid_dir)
+    trfiles = load_generic_trfiles([story_name], root=trfile_dir)
     features_object = Features(grids, trfiles)
 
     if not featureset_name:
@@ -123,10 +129,20 @@ def load_generic_trfiles(stories, root="../data/trfiles"):
     """Loads a dictionary of generic TRFiles (i.e. not specifically from the session
     in which the data was collected.. this should be fine) for the given responses.
     """
+    # list file with .report extension
+    reports = os.listdir(root)
+    reports = [r for r in reports if r.endswith(".report")]
+    
     trdict = dict()
 
     for story in stories:
-        trf = TRFile(os.path.join(root, "%s.report" % story))
+        # check if there is a report file for the story
+        report_file = [r for r in reports if r.startswith(story)]
+        if len(report_file) == 0:
+            continue
+        report_file = report_file[0]
+        
+        trf = TRFile(os.path.join(root, report_file))
         trdict[story] = [trf]
 
     return trdict

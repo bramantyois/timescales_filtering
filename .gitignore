@@ -5,3 +5,5 @@ intermediate_outputs
 outputs
 .archive
 *.out
+*.p
+data
