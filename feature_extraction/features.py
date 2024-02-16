@@ -1,17 +1,19 @@
 """Modules to extract stimulus features."""
+
 import numpy as np
 import torch
 
 from typing import List
-from transformers import AutoConfig, AutoModel, AutoTokenizer
+from transformers import AutoConfig, AutoModel, AutoTokenizer, pipeline
 
 from DataSequence import DataSequence
 from hard_coded_things import (
     bad_words,
     bad_words_with_sentence_boundaries,
     sentence_end_word,
+    sentence_end_punctuation,
     sentence_start_words,
-    sentence_end_word_zh
+    sentence_end_word_zh,
 )
 
 if torch.cuda.is_available():
@@ -35,25 +37,97 @@ def clean_split_inds(removed_indices: List[int], split_inds: np.ndarray):
 
 
 def get_clean_text(ds, words_to_remove=sentence_start_words):
-    text = np.array(ds.data)
+    text = np.array(ds.data).tolist()
+    # check if text in chinese or english
+    is_chinese = False
+    if any(sentence_end_word_zh in word for word in text):
+        print("Chinese text")
+        is_chinese = True
+    else:
+        print("English text")
+
+    # check if text has sentence_end_word_zh, if so append it at the end of text
+    new_text = []
+    
+    if is_chinese:
+        for t in text:
+            if t[-1] == sentence_end_word_zh:
+                # split the word into two words
+                t_split = t.split(sentence_end_word_zh)
+
+                if len(t_split) == 2:
+                    new_text.append(t_split[0])
+                    new_text.append(sentence_end_word_zh)
+                else:
+                    print("no split ")
+           
+            else:
+                new_text.append(t)
+    
+        text = np.array(new_text)
+    else:
+        text = np.array(text)
+    # else:
+    #     for t in text:
+    #         if t[-1] == sentence_end_punctuation:
+    #             # split the word into two words
+    #             t_split = t.split(sentence_end_punctuation)
+
+    #             if len(t_split) == 2:
+    #                 new_text.append(t_split[0])
+    #                 new_text.append(sentence_end_punctuation)
+    #             else:
+    #                 print("no split ")
+    #         else:
+    #             new_text.append(t)
+                
+
     indices_to_remove = []
     indices_to_remove += list(np.where(np.isin(text, words_to_remove))[0])
     indices_to_remove = list(set(indices_to_remove))
     indices_to_remove.sort()
     text = np.delete(text, indices_to_remove)
-    sentence_ends_en = np.where(text == sentence_end_word)[0]
-    sentence_ends_zh = np.array([i for i, word in enumerate(text) if sentence_end_word_zh in word])
-    if len(sentence_ends_en) > 0:
-        # english
-        sentence_ends = sentence_ends_en
-        text[sentence_ends] = "."
-    elif len(sentence_ends_zh) > 0:
+
+    # ZH
+    if is_chinese:
+        sentence_ends_zh = np.array(
+            [i for i, word in enumerate(text) if sentence_end_word_zh in word])
         print("Chinese sentence ends: ", len(sentence_ends_zh))
-        # chinese
         sentence_ends = sentence_ends_zh
+    else:
+    # EN
+        sentence_ends = np.where(text == sentence_end_word)[0]
+        # if len(sentence_ends_en_word) > 0:
+        #     print("English sentence ends: ", len(sentence_ends_en_word))
+        #     sentence_ends = sentence_ends_en_word
+        
+        # else:
+        #     sentence_ends_en_punc = np.array(
+        #         [i for i, word in enumerate(text) if sentence_end_punctuation in word])
+        #     print("English sentence ends: ", len(sentence_ends_en_punc))
+        #     sentence_ends = sentence_ends_en_punc
+
+    if len(sentence_ends) == 0:
+        raise ValueError("No sentence ends found in text.")
     sentence_starts = np.array([-1] + list(sentence_ends[:-1])) + 1
-    
     text = np.array(text)
+
+    # check if len sentence < 128, If so split
+    # new_sentence_starts = []
+    # new_sentence_ends = []
+    
+    # for i in range(len(sentence_starts)):
+    #     if sentence_ends[i] - sentence_starts[i] > 128:
+    #         print("Splitting sentence")
+    #         new_sentence_starts.append(sentence_starts[i])
+    #         new_sentence_ends.append(sentence_starts[i] + 128)
+    #         new_sentence_starts.append(sentence_starts[i] + 128)
+    #         new_sentence_ends.append(sentence_ends[i])
+    #     else:
+    #         new_sentence_starts.append(sentence_starts[i])
+    #         new_sentence_ends.append(sentence_ends[i])
+    # sentence_starts = np.array(new_sentence_starts)
+    # sentence_ends = np.array(new_sentence_ends)
     
     data_times = np.copy(ds.data_times)
     data_times = np.delete(data_times, indices_to_remove)
@@ -61,7 +135,10 @@ def get_clean_text(ds, words_to_remove=sentence_start_words):
     split_inds = clean_split_inds(
         removed_indices=indices_to_remove, split_inds=split_inds
     )
-    return sentence_starts, sentence_ends, split_inds, data_times, text
+    return sentence_starts, sentence_ends, split_inds, data_times, text, is_chinese
+
+
+# def infer_end_of_sentence(text: List[str], sentence_end_word: str):
 
 
 def make_word_ds(
@@ -141,8 +218,8 @@ class Features(object):
                 model_name=model_name,
                 layer_num=layer_num,
                 split_type=split_type,
-                #bert_trial_num=bert_trial_num,
-                #bert_step_num=bert_step_num,
+                # bert_trial_num=bert_trial_num,
+                # bert_step_num=bert_step_num,
                 max_seq_length=max_seq_length,
             )
         if downsample:
@@ -231,13 +308,13 @@ def get_contextual_embeddings(
 
     new_data = []
     if split_type == "sentence":
-        sentence_starts, sentence_ends, split_inds, data_times, text = get_clean_text(
-            ds_with_sentence_boundaries, 
+        sentence_starts, sentence_ends, split_inds, data_times, text, is_chinese = get_clean_text(
+            ds_with_sentence_boundaries,
             # remove_repeated_words=False,
         )
     elif split_type == "causal_all":
-        _, _, split_inds, data_times, text = get_clean_text(
-            ds_with_sentence_boundaries, 
+        _, _, split_inds, data_times, text, is_chinese = get_clean_text(
+            ds_with_sentence_boundaries,
             # remove_repeated_words=False
         )
         sentence_starts = [
@@ -250,10 +327,14 @@ def get_contextual_embeddings(
     )
     for sentence_start, sentence_end in zip(sentence_starts, sentence_ends):
         sentence = text[sentence_start : sentence_end + 1]
-        if sentence[-1] == "." or (sentence_end_word_zh in sentence[-1]) :
-            sentence = sentence[:-1]
+        # if (sentence[-1]==sentence_end_word_zh) or (sentence[-1]==sentence_end_punctuation):
+        if is_chinese:
+            if sentence[-1] == sentence_end_word_zh:
+                sentence = sentence[:-1]
         else:
-            continue
+            if sentence[-1] == sentence_end_word or sentence[-1] == sentence_end_punctuation:
+                sentence = sentence[:-1]
+        
         tokenized_input_sequence = np.concatenate(
             [tokenizer.tokenize(word) for word in sentence]
         )
@@ -263,6 +344,8 @@ def get_contextual_embeddings(
         tokens_tensor = torch.tensor([indexed_tokens]).to(device)
 
         with torch.no_grad():
+            
+            
             outputs = model(tokens_tensor)
             if layer_num == -1:
                 layer_embedding = torch.cat(outputs[-1], dim=-1)[0].to(

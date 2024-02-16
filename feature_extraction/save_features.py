@@ -22,6 +22,8 @@ from hard_coded_things import (
     silence_length,
     test_stories,
     train_stories,
+    train_stories_zh,
+    test_stories_zh,
 )
 from utils_rbf import apply_rbf_interpolation, get_rbf_interpolation_time
 from utils_linterp import apply_linear_interpolation, get_interpolation_times
@@ -672,17 +674,25 @@ if __name__ == "__main__":
     
     if parser.is_bling:
         if parser.is_chinese:
-            story_grid_dir = f"../data/bling/{parser.subject_id}/txtgrids/zh"
+            #story_grid_dir = f"../data/bling/{parser.subject_id}/txtgrids/zh"
+            story_grid_dir = f"../data/bling/{parser.subject_id}/moth_grids/zh"
             story_trfile_dir = f"../data/bling/{parser.subject_id}/trfiles/zh"
         else:
-            story_grid_dir = f"../data/bling/{parser.subject_id}/txtgrids/en"
+            #story_grid_dir = f"../data/bling/{parser.subject_id}/moth_grids/en"
+            story_grid_dir = "../data/deniz2019/en/sentence_TextGrids"
             story_trfile_dir = f"../data/bling/{parser.subject_id}/trfiles/en"                
     else:
         story_grid_dir = "../data/deniz2019/en/sentence_TextGrids"
         story_trfile_dir = "../data/deniz2019/en/trfiles"
         
+    
     # if parser.task == "build_features":
-    for story_name in train_stories[:1] + test_stories + train_stories[1:]:
+    
+    stories = train_stories + test_stories
+    #stories = ['myfirstdaywiththeyankees']
+    
+    #for story_name in train_stories[:1] + test_stories + train_stories[1:]:
+    for story_name in stories:
 
         extract_features(
             featureset_name=featureset_name,
@@ -694,9 +704,11 @@ if __name__ == "__main__":
             story_grid_dir=story_grid_dir,
             story_trfile_dir=story_trfile_dir,
         )
+        
+    lang_appendix = "zh" if parser.is_chinese else "en"
     save_features_dicts(
         featureset_name=featureset_name,
-        save_path=f"./outputs/timescales_{featureset_name}.npz",
+        save_path=f"./outputs/timescales_{featureset_name}_{lang_appendix}.npz",
         num_neurons=num_neurons,
     )
     # else:

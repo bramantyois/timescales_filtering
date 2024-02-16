@@ -55,7 +55,7 @@ featuresets_dict = {
                 "split_type": "causal_all",
             },
         ]
-    ]
+    ],
 }
 
 silence_length = 5
@@ -73,6 +73,22 @@ train_stories = [
     "undertheinfluence",
 ]
 test_stories = ["wheretheressmoke"]
+
+train_stories_zh = [
+    "alternateithacatomAudio_zh",
+    "avatarAudio_zh",
+    "howtodrawAudio_zh",
+    "legacyAudio_zh",
+    "lifeAudio_zh",
+    "myfirstdaywiththeyankeesAudio_zh",
+    "nakedAudio_zh",
+    "odetostepfatherAudio_zh",
+    "soulsAudio_zh",
+    "undertheinfluenceAudio_zh",
+]
+
+test_stories_zh = ["wheretheressmokeAudio_zh"]
+
 
 frequency_to_period_name_dict = {
     0.375: "2_4_words",
@@ -108,5 +124,10 @@ bad_words_with_sentence_boundaries = bad_words + [
 ]
 sentence_start_words = ["sentence_start", "sentence start"]
 sentence_end_word = "sentence_end"
+sentence_end_punctuation = "."
+
+# remove "sp" from bad_words
+bad_words_w_sp = bad_words.copy()
+bad_words_w_sp.remove("sp")
 
 sentence_end_word_zh = "。"

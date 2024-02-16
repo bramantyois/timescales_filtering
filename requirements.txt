@@ -5,3 +5,7 @@ scikit-learn
 numpy
 seaborn
 matplotlib
+sentencepiece
+sacremoses
+sacrebleu
+evaluate
