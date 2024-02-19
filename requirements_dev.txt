@@ -2,3 +2,4 @@ jupyter
 black
 flake8
 pylance
+python-dotenv

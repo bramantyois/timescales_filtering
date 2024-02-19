@@ -18,8 +18,8 @@ from utils import (
 
 from hard_coded_things import (
     frequency_to_period_name_dict,
-    noise_trim_length,
-    silence_length,
+    # noise_trim_length,
+    # silence_length,
     test_stories,
     train_stories,
     train_stories_zh,
@@ -219,6 +219,8 @@ def downsample_embeddings(
     interpolation_method: str = "rbf",
     story_trfile_dir: str = "../data/en/trfiles",
     story_grid_dir: str = "../data/en/sentence_TextGrids",
+    trim_start: int = 10,
+    trim_end: int = 5,
 ):
     """Downsample interpolated filtered stimulus embeddings to BOLD TRs."""
     _, word_presentation_times, tr_times, num_words_feature = load_story_info(
@@ -267,9 +269,7 @@ def downsample_embeddings(
     t2 = time.time()
     print(f"Time to downsample: {t2 - t1}")
     print("Compute correlation with word rate")
-    word_rate = num_words_feature.ravel()[
-        silence_length + noise_trim_length : -noise_trim_length
-    ]  # [TRs]
+    word_rate = num_words_feature.ravel()[trim_start:-trim_end]  # [TRs]
     for fc, downsampled_matrix in filtered_stimulus_bands_downsampled.items():
         x = np.concatenate(
             [downsampled_matrix.T, word_rate.reshape(1, -1)]
@@ -490,7 +490,13 @@ def get_feature(
     return features  # [num_TRs x num_dims]
 
 
-def save_features_dicts(featureset_name: str, save_path: str, num_neurons: int):
+def save_features_dicts(
+    featureset_name: str,
+    save_path: str,
+    num_neurons: int,
+    trim_start: int = 10,
+    trim_end: int = 5,
+):
     """Save train and test feature dicts."""
     train_features_dict = {}
     test_features_dict = {}
@@ -505,7 +511,7 @@ def save_features_dicts(featureset_name: str, save_path: str, num_neurons: int):
                 featureset_name=featureset_name,
                 story_name=story_name,
                 frequency=frequency,
-            )[silence_length + noise_trim_length : -noise_trim_length]
+            )[trim_start:-trim_end]
 
             train_features_dict_meta.append(
                 {
@@ -524,7 +530,7 @@ def save_features_dicts(featureset_name: str, save_path: str, num_neurons: int):
                 featureset_name=featureset_name,
                 story_name=story_name,
                 frequency=frequency,
-            )[silence_length + noise_trim_length : -noise_trim_length]
+            )[trim_start:-trim_end]
 
             test_features_dict_meta.append(
                 {
@@ -634,25 +640,37 @@ def get_parser():
         action="store_true",
         help="Whether to save interpolated features",
     )
-    
+
     parser.add_argument(
         "--is_bling",
         action="store_true",
         help="Whether bling data is being used",
     )
-    
+
     parser.add_argument(
         "--subject_id",
         type=str,
         default="COL",
     )
-    
+
     parser.add_argument(
         "--is_chinese",
         action="store_true",
         help="Whether Chinese data is being used",
     )
-    
+
+    parser.add_argument(
+        "--trim_start",
+        type=int,
+        default=10,
+    )
+
+    parser.add_argument(
+        "--trim_end",
+        type=int,
+        default=5,
+    )
+
     return parser
 
 
@@ -663,35 +681,39 @@ if __name__ == "__main__":
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 
+    # clean intermediate outputs
+    for f in glob.glob("intermediate_outputs/*"):
+        os.remove(f)
+
     featureset_name = str(parser.featureset_name)
     interpolation_method = str(parser.interpolation_method)
     save_interpolation = bool(parser.save_interpolation)
-    
+
     num_neurons = 9984
-    
+
     story_grid_dir = "../data/en/sentence_TextGrids"
     story_trfile_dir = "../data/en/trfiles"
-    
+
     if parser.is_bling:
         if parser.is_chinese:
-            #story_grid_dir = f"../data/bling/{parser.subject_id}/txtgrids/zh"
+            # story_grid_dir = f"../data/bling/{parser.subject_id}/txtgrids/zh"
             story_grid_dir = f"../data/bling/{parser.subject_id}/moth_grids/zh"
             story_trfile_dir = f"../data/bling/{parser.subject_id}/trfiles/zh"
+            #story_trfile_dir = f"../data/.archive/COL/trfiles/trfile_moth_COL_zh"
         else:
-            #story_grid_dir = f"../data/bling/{parser.subject_id}/moth_grids/en"
+            # story_grid_dir = f"../data/bling/{parser.subject_id}/moth_grids/en"
             story_grid_dir = "../data/deniz2019/en/sentence_TextGrids"
-            story_trfile_dir = f"../data/bling/{parser.subject_id}/trfiles/en"                
+            story_trfile_dir = f"../data/bling/{parser.subject_id}/trfiles/en"
     else:
         story_grid_dir = "../data/deniz2019/en/sentence_TextGrids"
         story_trfile_dir = "../data/deniz2019/en/trfiles"
-        
-    
+
     # if parser.task == "build_features":
-    
+
     stories = train_stories + test_stories
-    #stories = ['myfirstdaywiththeyankees']
-    
-    #for story_name in train_stories[:1] + test_stories + train_stories[1:]:
+    # stories = ['myfirstdaywiththeyankees']
+
+    # for story_name in train_stories[:1] + test_stories + train_stories[1:]:
     for story_name in stories:
 
         extract_features(
@@ -704,12 +726,15 @@ if __name__ == "__main__":
             story_grid_dir=story_grid_dir,
             story_trfile_dir=story_trfile_dir,
         )
-        
+
     lang_appendix = "zh" if parser.is_chinese else "en"
+
     save_features_dicts(
         featureset_name=featureset_name,
         save_path=f"./outputs/timescales_{featureset_name}_{lang_appendix}.npz",
         num_neurons=num_neurons,
+        trim_start=parser.trim_start,
+        trim_end=parser.trim_end,
     )
     # else:
     #     for story_name in train_stories[:1] + test_stories + train_stories[1:]:
