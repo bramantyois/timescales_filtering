@@ -501,17 +501,22 @@ def save_features_dicts(
     train_features_dict = {}
     test_features_dict = {}
 
+    train_features_untrimmed_dict = {}
+    test_features_untrimmed_dict = {}
+
     train_features_dict_meta = []
     test_features_dict_meta = []
 
     for frequency, timescale_name in frequency_to_period_name_dict.items():
-        train_feature = []
+        train_feature_trimmed = []
+        train_feature_untrimmed = {}
         for i, story_name in enumerate(train_stories):
             feature = get_feature(
                 featureset_name=featureset_name,
                 story_name=story_name,
                 frequency=frequency,
-            )[trim_start:-trim_end]
+            )
+            # )[trim_start:-trim_end]
 
             train_features_dict_meta.append(
                 {
@@ -521,16 +526,18 @@ def save_features_dicts(
                     "feature_len": feature.shape[0],
                 }
             )
+            train_feature_trimmed.append(feature[trim_start:-trim_end])
+            train_feature_untrimmed[story_name] = feature
 
-            train_feature.append(feature)
-
-        test_feature = []
+        test_feature_trimmed = []
+        test_feature_untrimmed = {}
         for i, story_name in enumerate(test_stories):
             feature = get_feature(
                 featureset_name=featureset_name,
                 story_name=story_name,
                 frequency=frequency,
-            )[trim_start:-trim_end]
+            )
+            # )[trim_start:-trim_end]
 
             test_features_dict_meta.append(
                 {
@@ -541,42 +548,35 @@ def save_features_dicts(
                 }
             )
 
-            test_feature.append(feature)
+            test_feature_trimmed.append(feature[trim_start:-trim_end])
+            test_feature_untrimmed[story_name] = feature
 
-        train_feature = np.concatenate(train_feature, axis=0)
-        test_feature = np.concatenate(test_feature, axis=0)
+        train_feature_trimmed = np.concatenate(train_feature_trimmed, axis=0)
+        test_feature_trimmed = np.concatenate(test_feature_trimmed, axis=0)
 
-        # train_feature = np.concatenate(
-        #     [
-        #         get_feature(
-        #             featureset_name=featureset_name,
-        #             story_name=story_name,
-        #             frequency=frequency,
-        #         )[silence_length + noise_trim_length : -noise_trim_length]
-        #         for story_name in train_stories
-        #     ],
-        #     axis=0,
-        # )
-        # test_feature = np.concatenate(
-        #     [
-        #         get_feature(
-        #             featureset_name=featureset_name,
-        #             story_name=story_name,
-        #             frequency=frequency,
-        #         )[silence_length + noise_trim_length : -noise_trim_length]
-        #         for story_name in test_stories
-        #     ],
-        #     axis=0,
-        # )
+        train_features_dict[timescale_name] = train_feature_trimmed
+        test_features_dict[timescale_name] = test_feature_trimmed
 
-        train_features_dict[timescale_name] = train_feature
-        test_features_dict[timescale_name] = test_feature
+        train_features_untrimmed_dict[timescale_name] = train_feature_untrimmed
+        test_features_untrimmed_dict[timescale_name] = test_feature_untrimmed
 
-        print(train_feature.shape, test_feature.shape)
-        assert train_feature.shape[1] == test_feature.shape[1] == num_neurons
+        # print(train_feature_trimmed.shape, test_feature_trimmed.shape)
+        assert (
+            train_feature_trimmed.shape[1]
+            == test_feature_trimmed.shape[1]
+            == num_neurons
+        ), f"train_feature_trimmed.shape[1] = {train_feature_trimmed.shape[1]}, test_feature_trimmed.shape[1] = {test_feature_trimmed.shape[1]}, num_neurons = {num_neurons}"
+
     print("saving compressed dict")
     np.savez_compressed(
         os.path.join(save_path), train=train_features_dict, test=test_features_dict
+    )
+
+    print("saving untrimmed dict")
+    np.savez_compressed(
+        os.path.join(save_path.replace(".npz", "_untrimmed.npz")),
+        train=train_features_untrimmed_dict,
+        test=test_features_untrimmed_dict,
     )
 
     # save meta data as csv
@@ -625,6 +625,7 @@ def get_parser():
             "mBERT_all",
             "mBERT_10",
             "mBERT_100",
+            "chinese_BERT_all",
         ],
     )
     parser.add_argument(
@@ -684,7 +685,10 @@ if __name__ == "__main__":
     # clean intermediate outputs
     for f in glob.glob("intermediate_outputs/*"):
         os.remove(f)
-
+    # clean best alphas
+    for f in glob.glob("best_alphas/*"):
+        os.remove(f)
+        
     featureset_name = str(parser.featureset_name)
     interpolation_method = str(parser.interpolation_method)
     save_interpolation = bool(parser.save_interpolation)
@@ -699,7 +703,7 @@ if __name__ == "__main__":
             # story_grid_dir = f"../data/bling/{parser.subject_id}/txtgrids/zh"
             story_grid_dir = f"../data/bling/{parser.subject_id}/moth_grids/zh"
             story_trfile_dir = f"../data/bling/{parser.subject_id}/trfiles/zh"
-            #story_trfile_dir = f"../data/.archive/COL/trfiles/trfile_moth_COL_zh"
+            # story_trfile_dir = f"../data/.archive/COL/trfiles/trfile_moth_COL_zh"
         else:
             # story_grid_dir = f"../data/bling/{parser.subject_id}/moth_grids/en"
             story_grid_dir = "../data/deniz2019/en/sentence_TextGrids"

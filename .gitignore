@@ -6,3 +6,4 @@ outputs
 .archive
 *.out
 *.p
+best_alphas

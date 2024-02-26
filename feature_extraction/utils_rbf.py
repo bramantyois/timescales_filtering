@@ -65,7 +65,7 @@ def apply_rbf_interpolation(
     nhidden = vecs.shape[1]
     start = time.time()
     if do_train_rbf:
-        pool = ThreadPool(processes=4)
+        pool = ThreadPool(processes=2)
         x = pool.map(
             lambda i: interpolation_function_train(
                 data_time, interp_time, vecs, i, best_epsilon=epsilon

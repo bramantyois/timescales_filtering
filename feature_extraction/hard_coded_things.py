@@ -56,6 +56,15 @@ featuresets_dict = {
             },
         ]
     ],
+    "chinese_BERT_all": [
+        [
+            "contextual_lm",
+            {
+                "model_name": "bert-base-chinese",
+                "layer_num": -1,
+            },
+        ]
+    ],
 }
 
 silence_length = 5
