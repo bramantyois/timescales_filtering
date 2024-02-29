@@ -194,3 +194,21 @@ def get_unmirrored_matrix(
         original_num_samples x num_features unmirrored matrix.
     """
     return mirrored_matrix[mirror_length : mirror_length + original_num_samples]
+
+
+def get_dir(is_bling: bool = False, is_chinese: bool = True):
+    if is_bling:
+        if is_chinese:
+            # story_grid_dir = f"../data/bling/{subject_id}/txtgrids/zh"
+            story_grid_dir = f"../data/bling/COL/moth_grids/zh"
+            story_trfile_dir = f"../data/bling/COL/trfiles/zh"
+            # story_trfile_dir = f"../data/.archive/COL/trfiles/trfile_moth_COL_zh"
+        else:
+            # story_grid_dir = f"../data/bling/{subject_id}/moth_grids/en"
+            story_grid_dir = "../data/deniz2019/en/sentence_TextGrids"
+            story_trfile_dir = f"../data/bling/COL/trfiles/en"
+    else:
+        story_grid_dir = "../data/deniz2019/en/sentence_TextGrids"
+        story_trfile_dir = "../data/deniz2019/en/trfiles"
+
+    return story_grid_dir, story_trfile_dir
