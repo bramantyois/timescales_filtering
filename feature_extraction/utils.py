@@ -87,13 +87,21 @@ class TRFile(object):
             label = " ".join(ll.split()[1:])
             time = float(timestr)
 
-            if label in ("init-trigger", "trigger"):
+            if label in ("init-trigger", "trigger", "first trigger"):
                 self.trtimes.append(time)
 
             elif label == "sound-start":
                 self.soundstarttime = time
 
             elif label == "sound-stop":
+                self.soundstoptime = time
+                
+            # additional labels for reading
+            ## check if label has "START: word"
+            elif "START: word" in label:
+                self.soundstarttime = time
+                
+            elif "END: Word" in label:
                 self.soundstoptime = time
 
             else:
