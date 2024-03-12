@@ -235,6 +235,7 @@ def get_contextual_embeddings(
     model_name: str = "bert-base-uncased",
     split_type: str = "sentence",
     max_seq_length: int = 512,
+    embedding_type="mean",
 ):
     """Extracts contextual embeddings from a pretrained language model.
 

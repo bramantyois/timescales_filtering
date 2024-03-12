@@ -30,6 +30,8 @@ from utils_linterp import apply_linear_interpolation, get_interpolation_times
 
 import argparse
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
 
 def get_savename_template(
     story_name: str,
@@ -676,6 +678,7 @@ def get_parser():
 
 
 if __name__ == "__main__":
+    
     parser = get_parser().parse_args()
 
     for save_dir in ["outputs", "intermediate_outputs", "best_alphas"]:
@@ -701,11 +704,15 @@ if __name__ == "__main__":
     if parser.is_bling:
         if parser.is_chinese:
             # story_grid_dir = f"../data/bling/{parser.subject_id}/txtgrids/zh"
-            story_grid_dir = f"../data/bling/{parser.subject_id}/moth_grids/zh"
+            story_grid_dir = f"../data/bling/grids_w_punctuation/zh"
             story_trfile_dir = f"../data/bling/{parser.subject_id}/trfiles/zh"
             # story_trfile_dir = f"../data/.archive/COL/trfiles/trfile_moth_COL_zh"
         else:
             # story_grid_dir = f"../data/bling/{parser.subject_id}/moth_grids/en"
+            # story_grid_dir = "../data/deniz2019/en/sentence_TextGrids"
+            # story_trfile_dir = f"../data/bling/{parser.subject_id}/trfiles/en"  
+            # story_grid_dir = "../data/deniz2019/en/sentence_TextGrids"
+            # story_trfile_dir = "../data/deniz2019/en/trfiles"
             story_grid_dir = "../data/deniz2019/en/sentence_TextGrids"
             story_trfile_dir = f"../data/bling/{parser.subject_id}/trfiles/en"
     else:
@@ -717,9 +724,8 @@ if __name__ == "__main__":
     stories = train_stories + test_stories
     # stories = ['myfirstdaywiththeyankees']
 
-    # for story_name in train_stories[:1] + test_stories + train_stories[1:]:
+    #for story_name in train_stories[:1] + test_stories + train_stories[1:]:
     for story_name in stories:
-
         extract_features(
             featureset_name=featureset_name,
             # use_lowpass=True,
