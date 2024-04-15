@@ -24,6 +24,7 @@ from hard_coded_things import (
     train_stories,
     train_stories_zh,
     test_stories_zh,
+    featuresets_dict
 )
 from utils_rbf import apply_rbf_interpolation, get_rbf_interpolation_time
 from utils_linterp import apply_linear_interpolation, get_interpolation_times
@@ -32,6 +33,7 @@ import argparse
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
 
 def get_savename_template(
     story_name: str,
@@ -157,6 +159,43 @@ def save_filtered_features(
         pickle.dump(filtered_stimulus_bands, f)
 
 
+def save_unfiltered_features(
+    story_name: str,
+    featureset_name: str,
+    num_neurons: int,
+    neuron_index_range: range = None,
+    story_trfile_dir: str = "../data/en/trfiles",
+    story_grid_dir: str = "../data/en/sentence_TextGrids",
+):
+    """Save unfiltered stimulus features."""
+    (
+        stimulus_matrix,
+        _,
+        _,
+        _,
+    ) = load_story_info(
+        story_name,
+        featureset_name=featureset_name,
+        trfile_dir=story_trfile_dir,
+        grid_dir=story_grid_dir,
+    )
+    assert stimulus_matrix.shape[1] == num_neurons
+
+    if neuron_index_range:
+        stimulus_matrix = stimulus_matrix[:, neuron_index_range]
+
+    with open(
+        get_savename_template(
+            story_name=story_name,
+            neuron_index_range=neuron_index_range,
+            featureset_name=featureset_name,
+            step_name="unfiltered",
+        ),
+        "wb",
+    ) as f:
+        pickle.dump(stimulus_matrix, f)
+       
+        
 def interpolate_filtered_embeddings(
     story_name: str,
     featureset_name: str,
@@ -426,6 +465,98 @@ def interpolate_and_downsample_filtered_embeddings(
             pickle.dump(downsampled_data, f)
 
 
+def interpolate_and_downsample_unfiltered_embeddings(
+    story_name: str,
+    featureset_name: str,
+    num_neurons: int,
+    neuron_index_range: range = None,
+    lanczos_fc: float = 0.25,
+    rbf_train_story_name: str = "alternateithicatom",
+    interpolation_method: str = "rbf",
+    save_interpolation=False,
+    story_trfile_dir: str = "../data/en/trfiles",
+    story_grid_dir: str = "../data/en/sentence_TextGrids",
+):
+    all_saved = True
+
+    if get_savename_template(
+        story_name=story_name,
+        neuron_index_range=neuron_index_range,
+        featureset_name=featureset_name,
+        step_name=f"unfiltered_downsampled",
+    ) not in glob.glob("intermediate_outputs/*"):
+        all_saved = False
+    if all_saved:
+        print(f"Skipping {story_name}, {neuron_index_range} units.")
+        return
+
+    print("Saving interpolated unfiltered embeddings.")
+    
+    _, word_presentation_times, tr_times, num_words_feature = load_story_info(
+        story_name,
+        trfile_dir=story_trfile_dir,
+        grid_dir=story_grid_dir,
+    )
+    
+    if interpolation_method == "linear":
+        interpolated_times = get_interpolation_times(word_presentation_times)
+    elif interpolation_method == "rbf":
+        interpolated_times = get_rbf_interpolation_time(word_presentation_times)
+     
+    t1 = time.time()
+    with open(
+        get_savename_template(
+            story_name=story_name,
+            neuron_index_range=neuron_index_range,
+            featureset_name=featureset_name,
+            step_name="unfiltered",
+        ),
+        "rb",
+    ) as f:
+        unfiltered_stimulus = pickle.load(f)
+       
+    if interpolation_method == "linear":
+        interpolated_data = apply_linear_interpolation(
+            stimulus_matrix=unfiltered_stimulus,
+            word_times=word_presentation_times,
+        )
+    elif interpolation_method == "rbf":
+        interpolated_data = apply_rbf_interpolation(
+            vecs=unfiltered_stimulus,
+            do_train_rbf=(story_name == rbf_train_story_name),
+            fc=fc,
+            data_time=word_presentation_times,
+            save_string_addition=str(neuron_index_range) + str(fc),
+        )
+
+    # now downsample
+    downsampled_data = apply_filter(
+        fir="lanczos",
+        data=interpolated_data,
+        old_time=interpolated_times,
+        new_time=tr_times,
+        fc=lanczos_fc,
+    )
+    x = np.concatenate(
+        [np.array(downsampled_data.T), np.array(num_words_feature.reshape(1, -1))]
+    )  # (num_neurons + 1) x num_trs
+    corr = np.corrcoef(x)[-1, :-1]
+    corr = corr[np.where(~np.isnan(corr))]
+    print(f"corr with word rate {np.mean(np.abs(corr))}")
+    
+    with open(
+        get_savename_template(
+            story_name=story_name,
+            neuron_index_range=neuron_index_range,
+            featureset_name=featureset_name,
+            step_name=f"unfiltered_downsampled",
+        ),
+        "wb",
+    ) as f:
+        pickle.dump(downsampled_data, f)
+
+
+
 def extract_features(
     featureset_name,
     num_neurons,
@@ -464,6 +595,44 @@ def extract_features(
         )
 
 
+def extract_unfiltered_features(
+    featureset_name,
+    num_neurons,
+    story_name,
+    interpolation_method="rbf",
+    save_interpolation=False,
+    story_trfile_dir="../data/en/trfiles",
+    story_grid_dir="../data/en/sentence_TextGrids",
+):
+    """Call function to extract unfiltered features for each story."""
+    save_file_breakpoints = get_save_file_breakpoints(num_neurons)
+
+    print(
+        f'Saving unfiltered features for {story_name}, word bands indexed, {time.strftime("%c")}'
+    )
+    for breakpoint_start, breakpoint_end in zip(
+        [0] + save_file_breakpoints[:-1], save_file_breakpoints
+    ):
+        save_unfiltered_features(
+            story_name,
+            featureset_name=featureset_name,
+            num_neurons=num_neurons,
+            neuron_index_range=range(breakpoint_start, breakpoint_end),
+            story_grid_dir=story_grid_dir,
+            story_trfile_dir=story_trfile_dir,
+        )
+        interpolate_and_downsample_unfiltered_embeddings(
+            story_name=story_name,
+            featureset_name=featureset_name,
+            num_neurons=num_neurons,
+            neuron_index_range=range(breakpoint_start, breakpoint_end),
+            interpolation_method=interpolation_method,
+            save_interpolation=save_interpolation,
+            story_grid_dir=story_grid_dir,
+            story_trfile_dir=story_trfile_dir,
+        )
+            
+
 def get_feature(
     story_name: str,
     featureset_name: str,
@@ -482,6 +651,33 @@ def get_feature(
                 neuron_index_range=neuron_index_range,
                 featureset_name=featureset_name,
                 step_name=f"rbf_downsampled_{frequency}",
+            ),
+            "rb",
+        ) as f:
+            downsampled_data = pickle.load(f)
+        features_subsets.append(downsampled_data)
+    features = np.concatenate(features_subsets, axis=1)
+    features = features - features.mean(0)  # Mean-center features.
+    return features  # [num_TRs x num_dims]
+
+
+def get_unfiltered_feature(
+    story_name: str,
+    featureset_name: str,
+):
+    """Get unfiltered feature saved in extract_features()."""
+    save_file_breakpoints = get_save_file_breakpoints(num_neurons)
+    features_subsets = []
+    for breakpoint_start, breakpoint_end in zip(
+        [0] + save_file_breakpoints[:-1], save_file_breakpoints
+    ):
+        neuron_index_range = range(breakpoint_start, breakpoint_end)
+        with open(
+            get_savename_template(
+                story_name=story_name,
+                neuron_index_range=neuron_index_range,
+                featureset_name=featureset_name,
+                step_name=f"unfiltered_downsampled",
             ),
             "rb",
         ) as f:
@@ -604,6 +800,82 @@ def save_features_dicts(
     test_meta_df.to_csv(os.path.join(save_path.replace(".npz", "_test_meta.csv")))
 
 
+def save_unfiltered_features_dicts(
+    featureset_name: str,
+    save_path: str,
+    num_neurons: int,
+    trim_start: int = 10,
+    trim_end: int = 5,
+):
+    """Save train and test feature dicts."""
+    train_features_dict = {}
+    test_features_dict = {}
+
+    train_features_untrimmed_dict = {}
+    test_features_untrimmed_dict = {}
+
+    train_features_dict_meta = []
+    test_features_dict_meta = []
+
+    for i, story_name in enumerate(train_stories):
+        feature = get_unfiltered_feature(
+            featureset_name=featureset_name,
+            story_name=story_name,
+        )
+        # )[trim_start:-trim_end]
+
+        train_features_dict_meta.append(
+            {
+                "index": i,
+                "story_name": story_name,
+                "feature_len": feature.shape[0],
+            }
+        )
+        train_features_dict[story_name] = feature
+        train_features_untrimmed_dict[story_name] = feature
+
+    for i, story_name in enumerate(test_stories):
+        feature = get_unfiltered_feature(
+            featureset_name=featureset_name,
+            story_name=story_name,
+        )
+        # )[trim_start:-trim_end]
+
+        test_features_dict_meta.append(
+            {
+                "index": i,
+                "story_name": story_name,
+                "feature_len": feature.shape[0],
+            }
+        )
+        test_features_dict[story_name] = feature
+        test_features_untrimmed_dict[story_name] = feature
+
+    # save meta data as csv
+    train_meta_df = pd.DataFrame.from_dict(train_features_dict_meta)
+    # sort by index
+    train_meta_df = train_meta_df.sort_values(by=["index"])
+    # now get start and end indices
+    train_meta_df["start"] = train_meta_df.groupby("index").cumcount()
+    train_meta_df["end"] = train_meta_df["start"] + train_meta_df["feature_len"]
+
+    test_meta_df = pd.DataFrame.from_dict(test_features_dict_meta)
+    # sort by index
+    test_meta_df = test_meta_df.sort_values(by=["index"])
+    # now get start and end indices
+    test_meta_df["start"] = test_meta_df.groupby("index").cumcount()
+    test_meta_df["end"] = test_meta_df["start"] + test_meta_df["feature_len"]
+
+    train_meta_df.to_csv(os.path.join(save_path.replace(".npz", "_train_meta.csv")))
+    test_meta_df.to_csv(os.path.join(save_path.replace(".npz", "_test_meta.csv")))
+
+    print("saving compressed dict")
+    np.savez_compressed(
+        os.path.join(save_path), train=train_features_dict, test=test_features_dict
+    )
+    
+    
+
 def get_parser():
     parser = argparse.ArgumentParser()
 
@@ -673,12 +945,24 @@ def get_parser():
         type=int,
         default=5,
     )
+    
+    parser.add_argument(
+        "--dont_extract_filtered",
+        action="store_true",
+        help="Whether to extract filtered features",
+    )
+    
+    parser.add_argument(
+        "--extract_unfiltered",
+        action="store_true",
+        help="Whether to extract unfiltered features",
+    )
 
     return parser
 
 
 if __name__ == "__main__":
-    
+
     parser = get_parser().parse_args()
 
     for save_dir in ["outputs", "intermediate_outputs", "best_alphas"]:
@@ -691,7 +975,7 @@ if __name__ == "__main__":
     # clean best alphas
     for f in glob.glob("best_alphas/*"):
         os.remove(f)
-        
+
     featureset_name = str(parser.featureset_name)
     interpolation_method = str(parser.interpolation_method)
     save_interpolation = bool(parser.save_interpolation)
@@ -703,68 +987,75 @@ if __name__ == "__main__":
 
     if parser.is_bling:
         if parser.is_chinese:
-            # story_grid_dir = f"../data/bling/{parser.subject_id}/txtgrids/zh"
             story_grid_dir = f"../data/bling/grids_w_punctuation/zh"
             story_trfile_dir = f"../data/bling/{parser.subject_id}/trfiles/zh"
-            # story_trfile_dir = f"../data/.archive/COL/trfiles/trfile_moth_COL_zh"
         else:
-            # story_grid_dir = f"../data/bling/{parser.subject_id}/moth_grids/en"
-            # story_grid_dir = "../data/deniz2019/en/sentence_TextGrids"
-            # story_trfile_dir = f"../data/bling/{parser.subject_id}/trfiles/en"  
-            # story_grid_dir = "../data/deniz2019/en/sentence_TextGrids"
-            # story_trfile_dir = "../data/deniz2019/en/trfiles"
+
             story_grid_dir = "../data/deniz2019/en/sentence_TextGrids"
             story_trfile_dir = f"../data/bling/{parser.subject_id}/trfiles/en"
     else:
         story_grid_dir = "../data/deniz2019/en/sentence_TextGrids"
         story_trfile_dir = "../data/deniz2019/en/trfiles"
 
-    # if parser.task == "build_features":
-
     stories = train_stories + test_stories
-    # stories = ['myfirstdaywiththeyankees']
 
-    #for story_name in train_stories[:1] + test_stories + train_stories[1:]:
-    for story_name in stories:
-        extract_features(
+    if not parser.dont_extract_filtered:
+        for story_name in stories:
+            extract_features(
+                featureset_name=featureset_name,
+                # use_lowpass=True,
+                num_neurons=num_neurons,
+                story_name=story_name,
+                interpolation_method=interpolation_method,
+                save_interpolation=save_interpolation,
+                story_grid_dir=story_grid_dir,
+                story_trfile_dir=story_trfile_dir,
+            )
+
+        lang_appendix = "zh" if parser.is_chinese else "en"
+
+        save_features_dicts(
             featureset_name=featureset_name,
-            # use_lowpass=True,
+            save_path=f"./outputs/timescales_{featureset_name}_{lang_appendix}_{parser.subject_id.lower()}.npz",
             num_neurons=num_neurons,
-            story_name=story_name,
-            interpolation_method=interpolation_method,
-            save_interpolation=save_interpolation,
-            story_grid_dir=story_grid_dir,
-            story_trfile_dir=story_trfile_dir,
+            trim_start=parser.trim_start,
+            trim_end=parser.trim_end,
         )
+    
+    if parser.extract_unfiltered:
+        lang_appendix = "zh" if parser.is_chinese else "en"
 
-    lang_appendix = "zh" if parser.is_chinese else "en"
+        for story_name in stories:
+            extract_unfiltered_features(
+                featureset_name=featureset_name,
+                num_neurons=num_neurons,
+                story_name=story_name,
+                interpolation_method=interpolation_method,
+                save_interpolation=save_interpolation,
+                story_grid_dir=story_grid_dir,
+                story_trfile_dir=story_trfile_dir,
+            )
+            
+            # open words embeddings file
+            model_name = featuresets_dict[featureset_name][0][1]['model_name']
+            
+            word_embeddings_fn = f"outputs/word_embeddings_{model_name}.npy"
+            words_fn = f"outputs/words_{model_name}.npy"
+            
+            word_embeddings = np.load(word_embeddings_fn)
+            words = np.load(words_fn)
+            
+            # save it as npz
+            np.savez_compressed(
+                f"outputs/word_embeddings_{featureset_name}_{story_name}_{lang_appendix}.npz",
+                word_embeddings=word_embeddings,
+                words=words,
+            )
 
-    save_features_dicts(
-        featureset_name=featureset_name,
-        save_path=f"./outputs/timescales_{featureset_name}_{lang_appendix}.npz",
-        num_neurons=num_neurons,
-        trim_start=parser.trim_start,
-        trim_end=parser.trim_end,
-    )
-    # else:
-    #     for story_name in train_stories[:1] + test_stories + train_stories[1:]:
-    #         save_file_breakpoints = get_save_file_breakpoints(num_neurons)
-
-    #         interpolated = interpolate_filtered_embeddings(
-    #             story_name=story_name,
-    #             featureset_name=featureset_name,
-    #             neuron_index_range=[0, num_neurons],
-    #             interpolation_method=interpolation_method,
-    #         )
-
-    #         #save interpolated
-    #         with open(
-    #             get_savename_template(
-    #                 story_name=story_name,
-    #                 neuron_index_range=[0, num_neurons],
-    #                 featureset_name=featureset_name,
-    #                 step_name="interpolated",
-    #             ),
-    #             "wb",
-    #         ) as f:
-    #             pickle.dump(interpolated, f)
+        save_unfiltered_features_dicts(
+            featureset_name=featureset_name,
+            save_path=f"./outputs/timescales_unfiltered_{featureset_name}_{lang_appendix}_{parser.subject_id.lower()}.npz",
+            num_neurons=num_neurons,
+            trim_start=parser.trim_start,
+            trim_end=parser.trim_end,
+        )

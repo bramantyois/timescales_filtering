@@ -324,8 +324,11 @@ def get_contextual_embeddings(
         ]
         sentence_ends = [word_index for word_index in range(len(text))]
     print(
-        f"Extracting embeddings from {model_name} using {split_type} split type. {len(sentence_starts)} input sequences."
+        f"Extracting embeddings from {model_name} using {split_type} split type. {len(sentence_starts)} input sequences. number of words: {len(text)}"
     )
+    
+    words = []
+    
     for sentence_start, sentence_end in zip(sentence_starts, sentence_ends):
         sentence = text[sentence_start : sentence_end + 1]
         # if (sentence[-1]==sentence_end_word_zh) or (sentence[-1]==sentence_end_punctuation):
@@ -345,8 +348,6 @@ def get_contextual_embeddings(
         tokens_tensor = torch.tensor([indexed_tokens]).to(device)
 
         with torch.no_grad():
-            
-            
             outputs = model(tokens_tensor)
             if layer_num == -1:
                 layer_embedding = torch.cat(outputs[-1], dim=-1)[0].to(
@@ -365,7 +366,19 @@ def get_contextual_embeddings(
             elif split_type == "causal_all":
                 layer_embedding = [np.expand_dims(layer_embedding[-1], axis=0)]
             new_data += layer_embedding
+            for t in sentence:
+                words.append(t)
+        
     new_data = np.squeeze(np.array(new_data))
+    
+    word_embeddings_fn = f"outputs/word_embeddings_{model_name}.npy"
+    words_fn = f"outputs/words_{model_name}.npy"
+  
+    assert(len(new_data) == len(words))
+  
+    np.save(word_embeddings_fn, new_data)
+    np.save(words_fn, words)
+    
     embedding_ds = DataSequence(
         new_data, split_inds, data_times, ds_with_sentence_boundaries.tr_times
     )
