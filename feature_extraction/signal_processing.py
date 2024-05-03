@@ -1,3 +1,4 @@
+import os
 from typing import Dict, List
 
 from utils import load_story_info
@@ -13,6 +14,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from scipy.interpolate import interp1d
+
 
 def upsampling(
     story_data: np.ndarray,
@@ -33,7 +35,7 @@ def upsampling(
         # f = interp1d(word_presentation_times, story_data[:, i], kind=kind)
         # # interpolate data
         # new_data[:, i] = f(new_times)
-        new_data[:,i] = np.interp(new_times, word_presentation_times, story_data[:, i])
+        new_data[:, i] = np.interp(new_times, word_presentation_times, story_data[:, i])
 
     return new_data, new_times
 
@@ -98,17 +100,28 @@ def upsample_story(
     upsampling_method: str = "linear",
     story_grid_dir: str = "../data/deniz2019/en/sentence_TextGrids",
     story_trfile_dir: str = "../data/deniz2019/en/trfiles",
-    
+    cache: str = ".cache",
 ):
-    # story_grid_dir = f"../data/bling/{subject_id}/moth_grids/en"# load test_stories
-    story_data, word_presentation_times, tr_times, num_words_feature = load_story_info(
-        story_name=story_name,
-        featureset_name=featureset_name,
-        trfile_dir=story_trfile_dir,
-        grid_dir=story_grid_dir,
-    )
+    # check if story data is in cache
+    # if so, load it
+    data_path = os.path.join(cache, f"{featureset_name}-{story_name}.npy")
+    
+    if os.path.exists(data_path):
+        data_path = np.load(data_path, allow_pickle=True).tolist()
+        story_data = data_path["story_data"]
+        word_presentation_times = data_path["word_presentation_times"]
+    else:
+        # story_grid_dir = f"../data/bling/{subject_id}/moth_grids/en"# load test_stories
+        story_data, word_presentation_times, tr_times, num_words_feature = load_story_info(
+            story_name=story_name,
+            featureset_name=featureset_name,
+            trfile_dir=story_trfile_dir,
+            grid_dir=story_grid_dir,
+        )
+        
+        # save data to cache
+        np.save(data_path, {"story_data": story_data, "word_presentation_times": word_presentation_times})
 
-   
     upsampled_story_data, new_times = upsampling(
         story_data, word_presentation_times, new_sr, kind=upsampling_method
     )
@@ -118,7 +131,6 @@ def upsample_story(
         "word_presentation_times": new_times,
         "sr": new_sr,
     }
-    
 
 
 def plot_psds(

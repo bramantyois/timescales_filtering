@@ -7,3 +7,4 @@ outputs
 *.out
 *.p
 best_alphas
+.cache

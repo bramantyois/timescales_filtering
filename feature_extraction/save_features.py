@@ -556,7 +556,6 @@ def interpolate_and_downsample_unfiltered_embeddings(
         pickle.dump(downsampled_data, f)
 
 
-
 def extract_features(
     featureset_name,
     num_neurons,

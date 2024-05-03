@@ -95,12 +95,12 @@ class TRFile(object):
 
             elif label == "sound-stop":
                 self.soundstoptime = time
-                
+
             # additional labels for reading
             ## check if label has "START: word"
             elif "START: word" in label:
                 self.soundstarttime = time
-                
+
             elif "END: Word" in label:
                 self.soundstoptime = time
 
@@ -140,7 +140,7 @@ def load_generic_trfiles(stories, root="../data/trfiles"):
     # list file with .report extension
     reports = os.listdir(root)
     reports = [r for r in reports if r.endswith(".report")]
-    
+
     trdict = dict()
 
     for story in stories:
@@ -149,7 +149,7 @@ def load_generic_trfiles(stories, root="../data/trfiles"):
         if len(report_file) == 0:
             continue
         report_file = report_file[0]
-        
+
         trf = TRFile(os.path.join(root, report_file))
         trdict[story] = [trf]
 
@@ -204,19 +204,14 @@ def get_unmirrored_matrix(
     return mirrored_matrix[mirror_length : mirror_length + original_num_samples]
 
 
-def get_dir(is_bling: bool = False, is_chinese: bool = True):
-    if is_bling:
-        if is_chinese:
-            # story_grid_dir = f"../data/bling/{subject_id}/txtgrids/zh"
-            story_grid_dir = f"../data/bling/COL/moth_grids/zh"
-            story_trfile_dir = f"../data/bling/COL/trfiles/zh"
-            # story_trfile_dir = f"../data/.archive/COL/trfiles/trfile_moth_COL_zh"
-        else:
-            # story_grid_dir = f"../data/bling/{subject_id}/moth_grids/en"
-            story_grid_dir = "../data/deniz2019/en/sentence_TextGrids"
-            story_trfile_dir = f"../data/bling/COL/trfiles/en"
-    else:
-        story_grid_dir = "../data/deniz2019/en/sentence_TextGrids"
-        story_trfile_dir = "../data/deniz2019/en/trfiles"
+def get_dir(is_chinese: bool = True):
+
+    story_grid_dir = "../data/deniz2019/en/sentence_TextGrids"
+    story_trfile_dir = "../data/deniz2019/en/trfiles"
+
+    if is_chinese:
+        # story_grid_dir = f"../data/bling/{subject_id}/txtgrids/zh"
+        story_grid_dir = f"../data/bling/grids_w_punctuation/zh"
+        story_trfile_dir = f"../data/bling/COL/trfiles/zh"
 
     return story_grid_dir, story_trfile_dir
