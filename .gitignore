@@ -8,3 +8,4 @@ outputs
 *.p
 best_alphas
 .cache
+*.npz

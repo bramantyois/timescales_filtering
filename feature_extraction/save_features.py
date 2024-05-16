@@ -9,6 +9,8 @@ import pickle
 import sys
 import time
 
+from typing import Optional
+
 from filtering import apply_filter, apply_filter_even_grid
 from utils import (
     get_mirrored_matrix,
@@ -37,11 +39,11 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 def get_savename_template(
     story_name: str,
-    neuron_index_range: range,
+    neuron_index_range,
     featureset_name: str,
     step_name: str,
-    save_filepath: str = "intermediate_outputs",
-):
+    save_filepath: str = 'intermediate_outputs',
+):    
     return os.path.join(
         save_filepath,
         f"{step_name}_{neuron_index_range[0]}_{neuron_index_range[-1]}_{featureset_name}_{story_name}.p",
@@ -97,6 +99,8 @@ def save_filtered_features(
     highpass_fc: float = 1 / 4,
     story_trfile_dir: str = "../data/en/trfiles",
     story_grid_dir: str = "../data/en/sentence_TextGrids",
+    save_dir: str = 'intermediate_outputs'
+    
 ):
     """Save filtered stimulus features."""
     (
@@ -114,6 +118,7 @@ def save_filtered_features(
 
     if neuron_index_range:
         stimulus_matrix = stimulus_matrix[:, neuron_index_range]
+        
     fc_values, bandwidth_values = get_bandpass_values()  # [num_bands], [num_bands]
     filtered_stimulus_bands = {}
     for fc, bandwidth in zip(fc_values, bandwidth_values):
@@ -153,6 +158,7 @@ def save_filtered_features(
             neuron_index_range=neuron_index_range,
             featureset_name=featureset_name,
             step_name="filter",
+            save_filepath=save_dir
         ),
         "wb",
     ) as f:
