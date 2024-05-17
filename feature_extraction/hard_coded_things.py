@@ -65,6 +65,15 @@ featuresets_dict = {
             },
         ]
     ],
+    "GPT_all":[
+        [
+            "contextual_lm",
+            {
+                "model_name" : "openai-gpt",
+                "layer_num" : -1,
+            }
+        ]
+    ],
 }
 
 silence_length = 5

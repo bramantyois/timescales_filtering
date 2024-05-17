@@ -265,7 +265,10 @@ def get_contextual_embeddings(
         word_embeddings = []
         embedding_index = 0
         if use_special_tokens:
-            layer_embedding_cleaned = layer_embedding[1:-1]
+            if "gpt" in model_name: # case BERT
+                layer_embedding_cleaned = layer_embedding
+            else:
+                layer_embedding_cleaned = layer_embedding[1:-1]
         else:
             layer_embedding_cleaned = layer_embedding
         for word in input_sequence:

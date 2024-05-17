@@ -34,7 +34,7 @@ from utils_linterp import apply_linear_interpolation, get_interpolation_times
 import argparse
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 def get_savename_template(
